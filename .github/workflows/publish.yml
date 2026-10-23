@@ -1,0 +1,101 @@
+
+name: publish
+
+on:
+  schedule:
+    - cron: "30 0 * * 0"
+    - cron: "30 2 * * 0"
+    - cron: "0 4 * * 0"
+    - cron: "0 5 * * 2"
+    - cron: "0 7 * * 2"
+    - cron: "30 8 * * 2"
+    - cron: "30 11 * * 4"
+    - cron: "30 13 * * 4"
+    - cron: "0 15 * * 4"
+    - cron: "0 8 * * 5"
+    - cron: "0 10 * * 5"
+    - cron: "30 11 * * 5"
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "publish = اصنع فيديو | health = افحص المفاتيح فقط"
+        default: "publish"
+        type: choice
+        options:
+          - publish
+          - health
+      lookahead_hours:
+        description: "نافذة البحث عن موعد فاضي بالساعات"
+        default: "30"
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: bawsala-publish
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: System packages
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-core fonts-dejavu-core libraqm0 libfribidi0
+
+      - name: Python packages
+        run: |
+          pip install -r requirements.txt
+          pip install --upgrade edge-tts
+
+      - name: Run
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          LOOKAHEAD_HOURS: ${{ github.event.inputs.lookahead_hours }}
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 3 * * *" ] || [ "${{ github.event.inputs.mode }}" = "health" ]; then
+            python main.py --health
+          else
+            python main.py
+          fi
+
+      - name: Save state
+        if: always()
+        run: |
+          git config user.name "bawsala-bot"
+          git config user.email "bawsala-bot@users.noreply.github.com"
+          for p in state/state.json assets/music; do [ -e "$p" ] && git add "$p"; done
+          if ! git diff --cached --quiet; then
+            git commit -m "state: $(date -u +%Y-%m-%dT%H:%MZ)"
+            for i in 1 2 3 4; do
+              git pull --rebase --autostash && git push && break || sleep 6
+            done
+          fi
+
+      - name: Open or update an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          title="⚠️ بوصلة: فشل التشغيل"
+          body="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} — افتح الرابط وشوف Summary فيه السبب بالضبط."
+          num=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then gh issue comment "$num" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
