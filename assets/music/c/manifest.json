@@ -1,0 +1,27 @@
+{
+ "bpm": 104.0,
+ "bar_sec": 2.3076923076923075,
+ "tail_sec": 3.0,
+ "sections": {
+  "intro": {
+   "file": "intro.mp3",
+   "bars": 8
+  },
+  "build": {
+   "file": "build.mp3",
+   "bars": 8
+  },
+  "main": {
+   "file": "main.mp3",
+   "bars": 12
+  },
+  "climax": {
+   "file": "climax.mp3",
+   "bars": 8
+  },
+  "outro": {
+   "file": "outro.mp3",
+   "bars": 4
+  }
+ }
+}
