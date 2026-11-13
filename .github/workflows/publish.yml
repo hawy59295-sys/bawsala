@@ -1,11 +1,10 @@
-
 name: publish
 
 on:
   schedule:
-    - cron: "30 0 * * 0"
-    - cron: "30 2 * * 0"
-    - cron: "0 4 * * 0"
+    - cron: "30 3 * * 0"
+    - cron: "30 5 * * 0"
+    - cron: "0 7 * * 0"
     - cron: "0 5 * * 2"
     - cron: "0 7 * * 2"
     - cron: "30 8 * * 2"
@@ -22,11 +21,9 @@ on:
         description: "publish = اصنع فيديو | health = افحص المفاتيح فقط"
         default: "publish"
         type: choice
-        options:
-          - publish
-          - health
+        options: [publish, health]
       lookahead_hours:
-        description: "نافذة البحث عن موعد فاضي بالساعات"
+        description: "نافذة البحث عن موعد فاضي بالساعات (اكتب 200 لإنتاج فيديو الآن)"
         default: "30"
 
 permissions:
@@ -34,7 +31,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: bawsala-publish
+  group: bawsala-long
   cancel-in-progress: false
 
 jobs:
@@ -96,6 +93,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           title="⚠️ بوصلة: فشل التشغيل"
-          body="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} — افتح الرابط وشوف Summary فيه السبب بالضبط."
+          body="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} — افتح الرابط وشوف Summary فيه السبب."
           num=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number' || true)
           if [ -n "$num" ]; then gh issue comment "$num" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
