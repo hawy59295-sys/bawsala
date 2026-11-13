@@ -1,0 +1,89 @@
+name: short
+
+on:
+  schedule:
+    - cron: "30 2 * * 0"
+    - cron: "0 4 * * 0"
+    - cron: "10 3 * * 1"
+    - cron: "40 4 * * 1"
+    - cron: "15 2 * * 2"
+    - cron: "45 3 * * 2"
+    - cron: "30 3 * * 3"
+    - cron: "0 5 * * 3"
+    - cron: "50 2 * * 4"
+    - cron: "20 4 * * 4"
+    - cron: "45 3 * * 5"
+    - cron: "15 5 * * 5"
+    - cron: "5 2 * * 6"
+    - cron: "35 3 * * 6"
+  workflow_dispatch:
+    inputs:
+      lookahead_hours:
+        description: "نافذة البحث بالساعات (8 عادي — اكتب 30 لإنتاج شورت الآن)"
+        default: "8"
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: bawsala-short
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: System packages
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-core fonts-dejavu-core libraqm0 libfribidi0
+
+      - name: Python packages
+        run: |
+          pip install -r requirements.txt
+          pip install --upgrade edge-tts
+
+      - name: Make and schedule the short
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          LOOKAHEAD_HOURS: ${{ github.event.inputs.lookahead_hours }}
+        run: python main.py --short
+
+      - name: Save state
+        if: always()
+        run: |
+          git config user.name "bawsala-bot"
+          git config user.email "bawsala-bot@users.noreply.github.com"
+          for p in state/shorts.json; do [ -e "$p" ] && git add "$p"; done
+          if ! git diff --cached --quiet; then
+            git commit -m "shorts state: $(date -u +%Y-%m-%dT%H:%MZ)"
+            for i in 1 2 3 4; do
+              git pull --rebase --autostash && git push && break || sleep 6
+            done
+          fi
+
+      - name: Open or update an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          title="⚠️ بوصلة: فشل تشغيل الشورت"
+          body="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} — افتح الرابط وشوف Summary فيه السبب."
+          num=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then gh issue comment "$num" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
